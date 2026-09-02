@@ -13,6 +13,8 @@ final class NoteViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var currentSettings: AppSettings?
+    @Published var foldersRefreshToken: UUID = UUID()
+    @Published var notesRefreshToken: UUID = UUID()
 
     private let context: ModelContext
     private let apiKeyKey = "gemini_api_key"
@@ -34,7 +36,13 @@ final class NoteViewModel: ObservableObject {
 
     var filteredNotes: [Note] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let selectedNotes = currentFolder == nil ? notes : notes.filter { $0.folderID == currentFolder?.id }
+
+        let selectedNotes: [Note]
+        if currentFolder == nil {
+            selectedNotes = notes
+        } else {
+            selectedNotes = notes.filter { $0.folderID == currentFolder?.id }
+        }
 
         let filtered = query.isEmpty ? selectedNotes : selectedNotes.filter { note in
             let haystack = [note.title, note.content, note.tags].joined(separator: " ").lowercased()
@@ -64,7 +72,9 @@ final class NoteViewModel: ObservableObject {
     func fetchFolders() {
         do {
             let descriptor = FetchDescriptor<Folder>(sortBy: [SortDescriptor(\.name)])
-            folders = try context.fetch(descriptor)
+            let fetched = try context.fetch(descriptor)
+            folders = fetched
+            foldersRefreshToken = UUID()
         } catch {
             errorMessage = "No se pudieron cargar las carpetas: \(error.localizedDescription)"
         }
@@ -73,7 +83,9 @@ final class NoteViewModel: ObservableObject {
     func fetchNotes() {
         do {
             let descriptor = FetchDescriptor<Note>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
-            notes = try context.fetch(descriptor)
+            let fetched = try context.fetch(descriptor)
+            notes = fetched
+            notesRefreshToken = UUID()
         } catch {
             errorMessage = "No se pudieron cargar las notas: \(error.localizedDescription)"
         }
@@ -92,6 +104,7 @@ final class NoteViewModel: ObservableObject {
         do {
             try context.save()
             fetchFolders()
+            foldersRefreshToken = UUID()
             return folder
         } catch {
             errorMessage = "No se pudo crear la carpeta: \(error.localizedDescription)"
@@ -110,6 +123,7 @@ final class NoteViewModel: ObservableObject {
         do {
             try context.save()
             fetchFolders()
+            foldersRefreshToken = UUID()
             return true
         } catch {
             errorMessage = "No se pudo guardar la carpeta: \(error.localizedDescription)"
@@ -118,11 +132,17 @@ final class NoteViewModel: ObservableObject {
     }
 
     func deleteFolder(_ folder: Folder) {
+        if currentFolder?.id == folder.id {
+            currentFolder = folder.parentFolder
+        }
+
         context.delete(folder)
         do {
             try context.save()
             fetchFolders()
             fetchNotes()
+            foldersRefreshToken = UUID()
+            notesRefreshToken = UUID()
         } catch {
             errorMessage = "No se pudo eliminar la carpeta: \(error.localizedDescription)"
         }

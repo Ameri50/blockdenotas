@@ -3,6 +3,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("appTheme") private var appTheme: String = "system"
 
     var body: some View {
         TabView {
@@ -16,6 +17,7 @@ struct ContentView: View {
                     Label("IA", systemImage: "sparkles")
                 }
         }
+        .preferredColorScheme(appTheme == "dark" ? .dark : appTheme == "light" ? .light : nil)
         .tint(.purple)
         .background(LinearGradient(colors: [Color.purple.opacity(0.08), Color(.systemBackground)], startPoint: .top, endPoint: .bottom))
     }
@@ -79,21 +81,14 @@ struct NotesTabView: View {
             }
             .navigationTitle("NotasAI")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showSettings = true
                     } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "gearshape.fill")
                     }
                     .buttonStyle(.plain)
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showFolderMenu = true
-                    } label: {
-                        Label("Carpetas", systemImage: "folder")
-                    }
+                    .foregroundStyle(.purple)
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -400,6 +395,21 @@ struct NoteEditorView: View {
     @State private var contentText: String = ""
     @State private var tagsText: String = ""
 
+    private let featureButtons: [(emoji: String, title: String, template: String)] = [
+        ("B", "Negrita", "\n**Texto importante**\n"),
+        ("I", "Cursiva", "\n*Texto destacado*\n"),
+        ("U", "Subrayado", "\n<u>Texto subrayado</u>\n"),
+        ("☑️", "Checklist", "\n## Checklist\n- [ ] Tarea 1\n- [ ] Tarea 2\n- [ ] Tarea 3\n"),
+        ("#", "Título", "\n## Título\n"),
+        ("❝", "Cita", "\n> Cita o idea principal\n"),
+        ("📋", "Tabla", "\n## Tabla\n| Tema | Detalle | Estado |\n| --- | --- | --- |\n| Ejemplo | Información | Pendiente |\n"),
+        ("🔗", "Enlace", "\n[Nombre del enlace](https://example.com)\n"),
+        ("📌", "Lista", "\n- Punto principal\n- Segundo punto\n- Tercer punto\n"),
+        ("🏷️", "Etiqueta", "\n#ideas #trabajo #personal\n"),
+        ("📁", "Carpeta", "\n## Carpeta\n📁 Estudios\n📁 Trabajo\n📁 Personal\n"),
+        ("🤖", "IA", "\n## IA\nResumen:\nAcción recomendada:\nSiguiente paso:\n")
+    ]
+
     enum EditMode {
         case new
         case edit
@@ -418,6 +428,46 @@ struct NoteEditorView: View {
                     TextEditor(text: $contentText)
                         .frame(minHeight: 320)
                         .padding(.vertical, 4)
+                }
+
+                Section("Funciones de la nota") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            Button(action: {
+                                contentText = buildFeatureTemplate()
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "sparkles")
+                                    Text("Plantilla")
+                                }
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.purple.opacity(0.14))
+                                .foregroundStyle(.purple)
+                                .clipShape(Capsule())
+                            }
+
+                            ForEach(featureButtons, id: \ .title) { item in
+                                Button(action: {
+                                    contentText = appendFeature(contentText, template: item.template)
+                                }) {
+                                    VStack(spacing: 4) {
+                                        Text(item.emoji)
+                                            .font(.title3)
+                                        Text(item.title)
+                                            .font(.caption2.weight(.semibold))
+                                    }
+                                    .frame(width: 56, height: 52)
+                                    .padding(4)
+                                    .background(Color(.secondarySystemBackground))
+                                    .foregroundStyle(.primary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
 
                 Section("Etiquetas") {
@@ -454,6 +504,22 @@ struct NoteEditorView: View {
             .split(separator: ",")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    private func buildFeatureTemplate() -> String {
+        let body = featureButtons.map { item in
+            "- \(item.emoji) \(item.title)"
+        }.joined(separator: "\n")
+
+        return "Funciones de la nota\n\n\(body)\n\nEjemplo de organización\n\n📁 Estudios\n- 📄 Matemática\n- 📄 Programación\n- 📄 Tesis\n\n📁 Trabajo\n- 📄 Reuniones\n- 📄 Proyectos\n\n📁 Personal\n- 📄 Ideas\n- 📄 Documentos\n\nAdemás, puedes crear subcarpetas dentro de carpetas y mantener una estructura jerárquica."
+    }
+
+    private func appendFeature(_ existing: String, template: String) -> String {
+        let clean = template.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return clean
+        }
+        return existing + "\n\n" + clean
     }
 }
 
@@ -582,6 +648,7 @@ struct FolderActionsSheet: View {
 }
 
 struct SettingsView: View {
+    @AppStorage("appTheme") private var appTheme: String = "system"
     @State private var apiKey: String
     let onSave: (String) -> Void
     let onDelete: () -> Void
@@ -598,6 +665,15 @@ struct SettingsView: View {
                 Section("Gemini API Key") {
                     SecureField("Pega tu API key", text: $apiKey)
                         .textContentType(.password)
+                }
+
+                Section("Apariencia") {
+                    Picker("Tema", selection: $appTheme) {
+                        Text("Sistema").tag("system")
+                        Text("Claro").tag("light")
+                        Text("Oscuro").tag("dark")
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 Section {
